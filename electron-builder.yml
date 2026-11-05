@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: wow-addon-manager
+appId: com.azeroth.addonmanager
+productName: Azeroth Addon Manager
 directories:
   buildResources: build
 files:
