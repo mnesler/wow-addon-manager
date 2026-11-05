@@ -2,7 +2,15 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 import type { ActionResult, AddonStatus, AddonView, ScanResult, Settings, Source } from '../shared/types'
 import { Store, type LinkRow } from './db'
-import { getLatest, installFrom, parseRepo, removeFolders } from './github'
+import {
+  getLatest,
+  getSourceFallback,
+  installFrom,
+  parseRepo,
+  removeFolders,
+  WrongClientError,
+  type Latest
+} from './github'
 import { addonsDir, discoverFolders, groupDiscovered, scanRoot, type Discovered } from './wow'
 
 const norm = (v: string | null): string =>
@@ -232,8 +240,20 @@ export class AddonService {
     const { wowRoot, githubToken } = this.store.getSettings()
     return this.withBusy(id, async () => {
       try {
-        const latest = await getLatest(l.repo, githubToken, l.source)
-        const { folders, notes } = await installFrom(latest, addonsDir(wowRoot, l.flavor), githubToken)
+        let latest: Latest = await getLatest(l.repo, githubToken, l.source)
+        let result
+        try {
+          result = await installFrom(latest, addonsDir(wowRoot, l.flavor), githubToken)
+        } catch (e) {
+          if (!(e instanceof WrongClientError)) throw e
+          if (l.source !== 'auto')
+            throw new Error(`${e.message} Try the Tags or Latest code source.`)
+          // The release zip is for another client; the repo source usually has the multi-client toc.
+          latest = await getSourceFallback(l.repo, githubToken)
+          result = await installFrom(latest, addonsDir(wowRoot, l.flavor), githubToken)
+          result.notes.unshift('The release zip was built for another client, so this was installed from source.')
+        }
+        const { folders, notes } = result
         // Remove folders an older version shipped that this release dropped.
         const stale = l.folders.filter((f) => !folders.some((n) => n.toLowerCase() === f.toLowerCase()))
         removeFolders(addonsDir(wowRoot, l.flavor), stale)

@@ -48,6 +48,8 @@ export interface Latest {
   url: string
   assetName: string
   via: 'release' | 'tag' | 'code'
+  /** The file name suggests another client; check the .toc inside before installing. */
+  verify?: boolean
 }
 
 interface Asset {
@@ -60,7 +62,7 @@ interface Asset {
 const OTHER_CLIENT = /classic|vanilla|(^|[^a-z])era([^a-z]|$)|cata|wrath|wotlk|tbc|bcc|(^|[^a-z])mop([^a-z]|$)|pandaria/i
 const MAINLINE = /(^|[^a-z])(retail|mainline|main)([^a-z]|$)/i
 
-export function pickAsset(assets: Asset[]): Asset | null {
+export function pickAsset(assets: Asset[]): { asset: Asset; certain: boolean } | null {
   const zips = assets.filter((a) => a.name.toLowerCase().endsWith('.zip'))
   const score = (name: string): number => {
     if (OTHER_CLIENT.test(name)) return -10
@@ -69,7 +71,10 @@ export function pickAsset(assets: Asset[]): Asset | null {
     return s
   }
   const ranked = zips.map((a) => ({ a, s: score(a.name) })).sort((x, y) => y.s - x.s)
-  return ranked.length && ranked[0].s >= 0 ? ranked[0].a : null
+  if (!ranked.length) return null
+  // Packagers often mislabel multi-client zips (e.g. "-bcc" on a package whose .toc also lists
+  // retail). A name that looks like another client is only a hint: installFrom checks the .toc.
+  return { asset: ranked[0].a, certain: ranked[0].s >= 0 }
 }
 
 interface Rel {
@@ -82,17 +87,16 @@ interface Rel {
 async function fromRelease(repo: string, token: string): Promise<Latest | null> {
   const rel = await gh<Rel>(`/repos/${repo}/releases/latest`, token)
   if (!rel) return null
-  const asset = pickAsset(rel.assets)
-  if (asset)
+  const pick = pickAsset(rel.assets)
+  if (pick)
     return {
       tag: rel.tag_name,
       published: rel.published_at,
-      url: asset.browser_download_url,
-      assetName: asset.name,
-      via: 'release'
+      url: pick.asset.browser_download_url,
+      assetName: pick.asset.name,
+      via: 'release',
+      verify: !pick.certain
     }
-  if (rel.assets.some((a) => a.name.toLowerCase().endsWith('.zip')))
-    throw new Error(`Release ${rel.tag_name} has no download for Forever (only other clients).`)
   return {
     tag: rel.tag_name,
     published: rel.published_at,
@@ -139,6 +143,11 @@ async function fromCode(repo: string, token: string): Promise<Latest> {
     assetName: 'source',
     via: 'code'
   }
+}
+
+/** Source-based fallback for when a release's zip is for another client. */
+export async function getSourceFallback(repo: string, token: string): Promise<Latest> {
+  return (await fromTags(repo, token)) ?? fromCode(repo, token)
 }
 
 const STALE_MS = 90 * 24 * 3600 * 1000
@@ -199,6 +208,21 @@ export function findAddonDirs(dir: string, depth = 0): [string, string][] {
   return found
 }
 
+/** Interface numbers a folder's .toc files declare (e.g. 120100). Empty if none are declared. */
+function tocInterfaces(dir: string): number[] {
+  const nums: number[] = []
+  for (const f of readdirSync(dir)) {
+    if (!f.toLowerCase().endsWith('.toc')) continue
+    if (/[-_](mainline)\.toc$/i.test(f)) nums.push(120000) // a dedicated mainline toc
+    const m = readFileSync(join(dir, f), 'utf8').match(/^##\s*Interface\s*:\s*(.+)$/im)
+    if (m) for (const n of m[1].split(/[,\s]+/)) if (/^\d+$/.test(n)) nums.push(Number(n))
+  }
+  return nums
+}
+
+/** Forever runs the current (mainline-numbered, 10xxxx+) client. Classic builds use 1xxxx-5xxxx. */
+const supportsForever = (nums: number[]): boolean => nums.length === 0 || nums.some((n) => n >= 100000)
+
 interface PkgMeta {
   packageAs: string | null
   moves: [string, string][] // [path inside the package, new top-level folder]
@@ -223,6 +247,9 @@ export function parsePkgmeta(text: string): PkgMeta {
   }
   return out
 }
+
+/** The download is a build for another client (Classic, Era...). */
+export class WrongClientError extends Error {}
 
 export interface InstallResult {
   folders: string[]
@@ -253,6 +280,10 @@ export async function installFrom(latest: Latest, addonsPath: string, token: str
     new AdmZip(buf).extractAllTo(tmp, true)
     const found = findAddonDirs(tmp)
     if (found.length === 0) throw new Error('No addon (.toc) found inside the download.')
+    if (latest.verify && !found.some(([src]) => supportsForever(tocInterfaces(src))))
+      throw new WrongClientError(
+        `${latest.assetName} is built for another client (its .toc has no retail-era Interface).`
+      )
 
     // A source download is not packaged. `.pkgmeta` says what the packager would have done:
     // name the folder and move bundled plugins out to the top level.
