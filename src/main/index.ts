@@ -7,6 +7,10 @@ import { AddonService } from './service'
 import { addonsDir } from './wow'
 import type { Settings, Source } from '../shared/types'
 
+// Keep the data folder stable: a packaged app would otherwise derive it from the product name
+// and lose the links saved by dev builds.
+app.setPath('userData', join(app.getPath('appData'), 'wow-addon-manager'))
+
 let service: AddonService
 let timer: NodeJS.Timeout | null = null
 
