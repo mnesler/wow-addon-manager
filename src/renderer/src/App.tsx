@@ -138,7 +138,7 @@ export default function App(): React.JSX.Element {
     <div className="shell">
       <div className="titlebar">
         <Swords size={16} />
-        <span>Azeroth Addon Manager</span>
+        <span>WoW Forever Addon Manager</span>
       </div>
 
       <aside className="sidebar">
@@ -147,8 +147,8 @@ export default function App(): React.JSX.Element {
             <Swords size={22} />
           </div>
           <div>
-            <h1>Addon Manager</h1>
-            <p>Your interface, kept in order</p>
+            <h1>WoW Forever</h1>
+            <p>Addon Manager</p>
           </div>
         </div>
 

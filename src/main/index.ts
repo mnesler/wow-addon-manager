@@ -66,7 +66,7 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     backgroundColor: '#0b0d12',
-    title: 'Azeroth Addon Manager',
+    title: 'WoW Forever Addon Manager',
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: '#0b0d12', symbolColor: '#c8aa6e', height: 40 },

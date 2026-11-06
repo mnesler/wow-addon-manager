@@ -1,9 +1,9 @@
-# Azeroth Addon Manager
+# WoW Forever Addon Manager
 
 A desktop addon manager for **WoW Forever**. It finds the addons you already have installed, lets you
 link them (or new ones) to their GitHub repositories, and keeps them up to date, by hand or automatically.
 
-![Azeroth Addon Manager](docs/screenshot.png)
+![WoW Forever Addon Manager](docs/screenshot.png)
 
 ## Features
 

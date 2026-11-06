@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import type { AddonView, Source } from '../../../shared/types'
 import { ago } from '../data'
+import { iconCandidates } from '../icons'
 
 const ICON_CDN = 'https://wow.zamimg.com/images/wow/icons/large/'
 
@@ -30,8 +31,8 @@ interface Props {
 }
 
 function Icon({ addon }: { addon: AddonView }): React.JSX.Element {
-  const sources: string[] = []
-  if (addon.wowIcon) sources.push(`${ICON_CDN}${addon.wowIcon}.jpg`)
+  // Our assigned WoW icon, with the repo owner's avatar as a last resort if the CDN is unreachable.
+  const sources = iconCandidates(addon).map((n) => `${ICON_CDN}${n}.jpg`)
   const owner = addon.repo?.split('/')[0] ?? addon.githubHint?.split('/')[0]
   if (owner) sources.push(`https://github.com/${owner}.png?size=96`)
   const [i, setI] = useState(0)
